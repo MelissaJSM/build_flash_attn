@@ -9,9 +9,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest] # 우분투 22.04로 고정 (안정성)
+        os: [ubuntu-22.04, windows-latest] 
         python-version: ['3.10']
-        # 알려주신 설치 명령어를 그대로 실행하도록 세팅했습니다.
         pt-env: 
           - { version: '2.10.0', install: 'pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128' }
           - { version: '2.11.0', install: 'pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128' }
@@ -36,13 +35,13 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    # 3. CUDA Toolkit 12.8 무조건 고정 설치!
+    # 3. CUDA Toolkit 12.8.0 고정 설치 (✅ v0.2.35 최신 버전으로 업데이트!)
     - name: Setup CUDA Toolkit
-      uses: Jimver/cuda-toolkit@v0.2.19
+      uses: Jimver/cuda-toolkit@v0.2.35
       with:
-        cuda: '12.8.0' # cu128에 맞춰 12.8.0으로 고정했습니다.
+        cuda: '12.8.0' 
 
-    # 4. 필수 도구 및 파이토치 설치 (작성해주신 명령어 그대로 실행)
+    # 4. 필수 도구 및 파이토치 설치
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
@@ -65,7 +64,7 @@ jobs:
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
       run: python setup.py bdist_wheel
 
-    # 7. 빌드된 .whl 파일 업로드 (덮어쓰기 에러 방지)
+    # 7. 빌드된 .whl 파일 업로드
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
