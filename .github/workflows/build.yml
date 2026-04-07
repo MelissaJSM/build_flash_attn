@@ -1,0 +1,66 @@
+name: Build Flash Attention 2.8.3
+
+on:
+  workflow_dispatch: # GitHub Actions 탭에서 수동으로 'Run workflow' 버튼을 눌러 실행
+
+jobs:
+  build-wheels:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # 하나가 실패해도 다른 빌드는 계속 진행
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.10']
+        pytorch-version: ['2.10.0', '2.11.0'] 
+
+    steps:
+    # 1. flash-attn 공식 저장소의 2.8.3 버전 코드를 가져옵니다.
+    - name: Checkout flash-attn repo
+      uses: actions/checkout@v4
+      with:
+        repository: Dao-AILab/flash-attention
+        ref: v2.8.3
+        submodules: recursive # C++ 서브모듈(cutlass 등) 필수 포함
+
+    # 2. Python 환경 설정
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    # 3. CUDA Toolkit 설치 (컴파일에 필수)
+    - name: Setup CUDA Toolkit
+      uses: Jimver/cuda-toolkit@v0.2.19
+      with:
+        cuda: '12.1.0' # PyTorch 버전에 맞춘 CUDA 12.1 기준
+
+    # 4. PyTorch 및 필수 빌드 도구(Ninja 등) 설치
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch==${{ matrix.pytorch-version }} --index-url https://download.pytorch.org/whl/cu121
+        pip install ninja packaging wheel build
+
+    # 5. Linux 빌드 (메모리 제한 설정)
+    - name: Build Wheel (Linux)
+      if: runner.os == 'Linux'
+      env:
+        MAX_JOBS: 2 # GitHub Actions 메모리 초과 방지 (매우 중요)
+        FLASH_ATTENTION_FORCE_BUILD: "TRUE"
+        # TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;9.0" # 특정 GPU 아키텍처만 빌드하여 속도를 높이려면 주석 해제
+      run: python setup.py bdist_wheel
+
+    # 6. Windows 빌드 (메모리 제한 설정)
+    - name: Build Wheel (Windows)
+      if: runner.os == 'Windows'
+      env:
+        MAX_JOBS: 1 # Windows 환경은 메모리를 더 먹으므로 1로 제한
+        FLASH_ATTENTION_FORCE_BUILD: "TRUE"
+      run: python setup.py bdist_wheel
+
+    # 7. 빌드된 .whl 파일 업로드
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: flash-attn-2.8.3-${{ matrix.os }}-py${{ matrix.python-version }}-pt${{ matrix.pytorch-version }}
+        path: dist/*.whl
