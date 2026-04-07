@@ -35,11 +35,12 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    # 3. CUDA Toolkit 12.8.0 고정 설치 (✅ v0.2.35 최신 버전으로 업데이트!)
+    # 3. CUDA Toolkit 12.8.0 설치 및 로그 충돌 방지! (여기가 핵심!)
     - name: Setup CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.35
       with:
         cuda: '12.8.0' 
+        log-file-suffix: '${{ matrix.os }}-${{ matrix.pt-env.version }}' # ✅ 여러 빌드가 동시에 돌아가도 로그 파일 이름이 겹치지 않도록 이름표를 붙여줍니다.
 
     # 4. 필수 도구 및 파이토치 설치
     - name: Install Dependencies
@@ -48,7 +49,7 @@ jobs:
         pip install ninja packaging wheel build
         ${{ matrix.pt-env.install }}
 
-    # 5. Linux 빌드 (메모리 초과 방지)
+    # 5. Linux 빌드 
     - name: Build Wheel (Linux)
       if: runner.os == 'Linux'
       env:
@@ -56,7 +57,7 @@ jobs:
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
       run: python setup.py bdist_wheel
 
-    # 6. Windows 빌드 (안전 제일)
+    # 6. Windows 빌드 
     - name: Build Wheel (Windows)
       if: runner.os == 'Windows'
       env:
