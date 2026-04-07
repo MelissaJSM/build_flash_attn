@@ -7,13 +7,19 @@ jobs:
   build-wheels:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # 하나가 실패해도 다른 빌드는 계속 진행
+      fail-fast: false # 하나가 실패해도 다른 환경의 빌드는 끝까지 진행하도록 설정
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ['3.10']
         pytorch-version: ['2.10.0', '2.11.0'] 
 
     steps:
+    # 0. Windows 긴 파일명 제한 해제 (에러 해결의 핵심!)
+    # Checkout을 하기 전에 미리 시스템 설정을 바꿔주어야 합니다.
+    - name: Enable Git Long Paths (Windows)
+      if: runner.os == 'Windows'
+      run: git config --system core.longpaths true
+
     # 1. flash-attn 공식 저장소의 2.8.3 버전 코드를 가져옵니다.
     - name: Checkout flash-attn repo
       uses: actions/checkout@v4
@@ -45,9 +51,8 @@ jobs:
     - name: Build Wheel (Linux)
       if: runner.os == 'Linux'
       env:
-        MAX_JOBS: 2 # GitHub Actions 메모리 초과 방지 (매우 중요)
+        MAX_JOBS: 2 # GitHub Actions 메모리 초과 방지
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
-        # TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;9.0" # 특정 GPU 아키텍처만 빌드하여 속도를 높이려면 주석 해제
       run: python setup.py bdist_wheel
 
     # 6. Windows 빌드 (메모리 제한 설정)
