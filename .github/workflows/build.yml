@@ -1,84 +1,69 @@
-name: Build Flash Attention (Windows & Linux)
+name: Build Flash Attention (Linux Only)
 
 on:
   workflow_dispatch:
 
 jobs:
   build-wheels:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest]
-        python-version: ['3.10']
+        python-version: ['3.13'] # 🚀 파이썬 3.13으로 변경!
         pt-env: 
-          - { version: '2.10.0', install: 'pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128' }
-          - { version: '2.11.0', install: 'pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128' }
+          # 🚀 CUDA 13.0 (cu130)으로 모두 변경!
+          - { version: '2.10.0', install: 'pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130' }
+          - { version: '2.11.0', install: 'pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130' }
 
     steps:
-    # 0. 리눅스 가상 메모리 추가 
+    # 0. 리눅스 가상 메모리 추가 (OOM 강제 종료 완벽 방어)
     - name: Free Disk Space & Enable Swap
-      if: runner.os == 'Linux'
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 10
 
-    # 1. Windows 긴 파일명 제한 해제 
-    - name: Enable Git Long Paths (Windows)
-      if: runner.os == 'Windows'
-      run: git config --system core.longpaths true
-
-    # 2. 윈도우 지원 포크 버전 가져오기
+    # 1. 원본 공식 저장소 가져오기 
+    # (윈도우가 아니므로 굳이 kingbri1 포크를 쓰지 않고 가장 안정적인 공식 원본 사용)
     - name: Checkout flash-attn repo
       uses: actions/checkout@v4
       with:
-        repository: kingbri1/flash-attention
+        repository: Dao-AILab/flash-attention
+        ref: v2.8.3
         submodules: recursive
 
-    # 3. Python 환경 설정
+    # 2. Python 환경 설정
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
-    # 4. CUDA Toolkit 12.8.0 설치
+    # 3. CUDA Toolkit 13.0 설치 (🚀 13.0.0 버전 명시)
     - name: Setup CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.35
       with:
-        cuda: '12.8.0' 
-        log-file-suffix: '${{ matrix.os }}-${{ matrix.pt-env.version }}'
+        cuda: '13.0.0' 
+        log-file-suffix: 'linux-${{ matrix.pt-env.version }}'
 
-    # 5. 필수 도구 및 파이토치 설치
+    # 4. 필수 도구 및 파이토치 설치
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install ninja packaging wheel build
         ${{ matrix.pt-env.install }}
 
-    # 6. Linux 빌드 
+    # 5. Linux 빌드 
     - name: Build Wheel (Linux)
-      if: runner.os == 'Linux'
       env:
-        MAX_JOBS: 1 
+        MAX_JOBS: 1 # 메모리 보호를 위해 1코어 제한
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
-        # 리눅스 컴파일러(GCC)는 똑똑하므로 12.0까지 꽉꽉 눌러 담습니다!
+        # RTX 30, 40, 50 및 미래 GPU(PTX) 지원
         TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0+PTX" 
       run: python setup.py bdist_wheel
 
-    # 7. Windows 빌드 (수정됨!)
-    - name: Build Wheel (Windows)
-      if: runner.os == 'Windows'
-      env:
-        MAX_JOBS: 1 
-        FLASH_ATTENTION_FORCE_BUILD: "TRUE"
-        # 윈도우 컴파일러 한계 극복! RTX 50(12.0) 코드는 빼고, PTX 설계도로 미래를 대비합니다.
-        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9+PTX" 
-      run: python setup.py bdist_wheel
-
-    # 8. 빌드된 .whl 파일 업로드
+    # 6. 빌드된 .whl 파일 업로드
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: flash-attn-kingbri-${{ matrix.os }}-py${{ matrix.python-version }}-pt${{ matrix.pt-env.version }}
+        name: flash-attn-2.8.3-linux-py${{ matrix.python-version }}-pt${{ matrix.pt-env.version }}
         path: dist/*.whl
         overwrite: true
