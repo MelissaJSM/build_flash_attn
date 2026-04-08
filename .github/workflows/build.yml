@@ -1,34 +1,35 @@
 name: Build Flash Attention (Windows & Linux)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 수동 빌드 실행 버튼
 
 jobs:
   build-wheels:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: false # 하나가 실패해도 다른 환경은 끝까지 빌드
       matrix:
-        os: [ubuntu-22.04, windows-latest]
+        os: [ubuntu-22.04, windows-latest] # 우분투 22.04로 고정 (안정성)
         python-version: ['3.10']
+        # PyTorch 2.10.0 및 2.11.0 버전을 모두 CUDA 12.8 환경에서 설치
         pt-env: 
           - { version: '2.10.0', install: 'pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128' }
           - { version: '2.11.0', install: 'pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128' }
 
     steps:
-    # 0. 리눅스 가상 메모리 추가 (OOM 완벽 방어)
+    # 0. 리눅스 가상 메모리 추가 (OOM 강제 종료 완벽 방어)
     - name: Free Disk Space & Enable Swap
       if: runner.os == 'Linux'
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 10
 
-    # 1. Windows 긴 파일명 제한 해제
+    # 1. Windows 긴 파일명 제한 해제 (Checkout 에러 방지)
     - name: Enable Git Long Paths (Windows)
       if: runner.os == 'Windows'
       run: git config --system core.longpaths true
 
-    # 2. 윈도우 지원 포크 버전 가져오기
+    # 2. 윈도우 지원 마개조 버전 가져오기 (kingbri1 포크 버전)
     - name: Checkout flash-attn repo
       uses: actions/checkout@v4
       with:
@@ -41,7 +42,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    # 4. CUDA Toolkit 12.8.0 설치
+    # 4. CUDA Toolkit 12.8.0 설치 및 로그 파일명 겹침 방지
     - name: Setup CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.35
       with:
@@ -55,22 +56,24 @@ jobs:
         pip install ninja packaging wheel build
         ${{ matrix.pt-env.install }}
 
-    # 6. Linux 빌드 (RTX 30, 40, 50 시리즈 지원!)
+    # 6. Linux 빌드 
     - name: Build Wheel (Linux)
       if: runner.os == 'Linux'
       env:
-        MAX_JOBS: 1 
+        MAX_JOBS: 1 # 메모리 보호를 위해 1코어로 제한
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
-        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0+PTX" # 🚀 12.0 (RTX 50) 추가!
+        # RTX 30(8.0, 8.6), 40(8.9), 50(12.0) 시리즈 및 미래 GPU(PTX) 완벽 지원!
+        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0+PTX" 
       run: python setup.py bdist_wheel
 
-    # 7. Windows 빌드 (RTX 30, 40, 50 시리즈 지원!)
+    # 7. Windows 빌드
     - name: Build Wheel (Windows)
       if: runner.os == 'Windows'
       env:
-        MAX_JOBS: 1 
+        MAX_JOBS: 1 # 메모리 보호를 위해 1코어로 제한
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
-        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0" # 🚀 12.0 (RTX 50) 추가!
+        # RTX 30(8.0, 8.6), 40(8.9), 50(12.0) 시리즈 및 미래 GPU(PTX) 완벽 지원!
+        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0+PTX" 
       run: python setup.py bdist_wheel
 
     # 8. 빌드된 .whl 파일 업로드
@@ -79,4 +82,4 @@ jobs:
       with:
         name: flash-attn-kingbri-${{ matrix.os }}-py${{ matrix.python-version }}-pt${{ matrix.pt-env.version }}
         path: dist/*.whl
-        overwrite: true
+        overwrite: true # 재실행 시 409 Conflict 에러 방지
