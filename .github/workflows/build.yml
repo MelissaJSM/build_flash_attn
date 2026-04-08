@@ -9,14 +9,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest] # 윈도우 다시 부활!
+        os: [ubuntu-22.04, windows-latest]
         python-version: ['3.10']
         pt-env: 
           - { version: '2.10.0', install: 'pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128' }
           - { version: '2.11.0', install: 'pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128' }
 
     steps:
-    # 0. 리눅스 가상 메모리 추가 (리눅스 환경 OOM 강제 종료 완벽 방지)
+    # 0. 리눅스 가상 메모리 추가 (OOM 완벽 방어)
     - name: Free Disk Space & Enable Swap
       if: runner.os == 'Linux'
       uses: pierotofy/set-swap-space@master
@@ -28,13 +28,11 @@ jobs:
       if: runner.os == 'Windows'
       run: git config --system core.longpaths true
 
-    # 2. 윈도우 지원 마개조 버전 가져오기! (여기가 핵심)
+    # 2. 윈도우 지원 포크 버전 가져오기
     - name: Checkout flash-attn repo
       uses: actions/checkout@v4
       with:
         repository: kingbri1/flash-attention
-        # 주의: 특정 버전(ref)을 지정하면 윈도우 패치가 안 된 과거 코드를 가져올 수 있으므로,
-        # 포크 저장소의 가장 최신 패치(기본 브랜치)를 가져오기 위해 ref 옵션은 삭제했습니다!
         submodules: recursive
 
     # 3. Python 환경 설정
@@ -43,7 +41,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    # 4. CUDA Toolkit 12.8.0 설치 및 로그 파일명 겹침 방지
+    # 4. CUDA Toolkit 12.8.0 설치
     - name: Setup CUDA Toolkit
       uses: Jimver/cuda-toolkit@v0.2.35
       with:
@@ -57,23 +55,25 @@ jobs:
         pip install ninja packaging wheel build
         ${{ matrix.pt-env.install }}
 
-    # 6. Linux 빌드 (가상 메모리 믿고 MAX_JOBS 2 유지)
+    # 6. Linux 빌드 (RTX 30, 40, 50 시리즈 지원!)
     - name: Build Wheel (Linux)
       if: runner.os == 'Linux'
       env:
-        MAX_JOBS: 2 
+        MAX_JOBS: 1 
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
+        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0+PTX" # 🚀 12.0 (RTX 50) 추가!
       run: python setup.py bdist_wheel
 
-    # 7. Windows 빌드 (안전하게 1코어로 천천히)
+    # 7. Windows 빌드 (RTX 30, 40, 50 시리즈 지원!)
     - name: Build Wheel (Windows)
       if: runner.os == 'Windows'
       env:
         MAX_JOBS: 1 
         FLASH_ATTENTION_FORCE_BUILD: "TRUE"
+        TORCH_CUDA_ARCH_LIST: "8.0;8.6;8.9;12.0" # 🚀 12.0 (RTX 50) 추가!
       run: python setup.py bdist_wheel
 
-    # 8. 빌드된 .whl 파일 업로드 (이름에 kingbri를 넣어 구분되게 했습니다)
+    # 8. 빌드된 .whl 파일 업로드
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
